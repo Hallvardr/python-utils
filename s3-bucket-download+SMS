@@ -1,0 +1,136 @@
+import boto3
+import time
+import os
+from datetime import date
+from botocore.exceptions import ClientError
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
+
+today = date.today().strftime("%d.%m.%Y")
+
+
+def download_directory(s3_client, bucket, prefix, local):
+    """
+    params:
+    - prefix: pattern to match in s3
+    - local: local path to folder in which to place files
+    - bucket: s3 bucket with target contents
+    - client: initialized s3 client object
+    """
+    keys = []
+    dirs = []
+    next_token = ''
+    base_kwargs = {
+        'Bucket': bucket,
+        'Prefix': prefix,
+    }
+    print(bucket)
+    while next_token is not None:
+        kwargs = base_kwargs.copy()
+        if next_token != '':
+            kwargs.update({'ContinuationToken': next_token})
+        results = s3_client.list_objects_v2(**kwargs)
+        contents = results.get('Contents')
+        for i in contents:
+            k = i.get('Key')
+
+            if k[-1] != '/':
+                keys.append(k)
+            else:
+                dirs.append(k)
+        next_token = results.get('NextContinuationToken')
+    for d in dirs:
+        dest_pathname = os.path.join(local, d)
+        if not os.path.exists(os.path.dirname(dest_pathname)):
+            os.makedirs(os.path.dirname(dest_pathname))
+    for k in keys:
+        d = k.split("/", 3)[3]
+        dest_pathname = os.path.join(local, d)
+        if not os.path.exists(os.path.dirname(dest_pathname)):
+            os.makedirs(os.path.dirname(dest_pathname))
+        # k = k.replace(".", "_")
+        print(k)
+        s3_client.download_file(bucket, k, dest_pathname)
+
+
+def sendmail():
+    AWS_REGION_mail = "region"
+    AWS_PROFILE_mail = "profile"
+
+    SUBJECT = "Weekly Report customer " + str(today)
+    print(SUBJECT)
+
+    CHARSET = "UTF-8"
+
+    SENDER = "sender mail"
+    RECIPIENT = "recepient mail"
+    CC = "CC mail"
+
+    FILE_NAME = "file_name"
+
+    BODY_TEXT = "Test"
+
+    file = FILE_NAME_DEMO.rsplit("\\", 1)[1]
+    print(file)
+
+    client = boto3.Session(profile_name=AWS_PROFILE_mail).client('ses', region_name=AWS_REGION_mail)
+
+    msg = MIMEMultipart()
+
+    # Add subject, from and to lines.
+    msg['Subject'] = SUBJECT
+    msg['From'] = SENDER
+    msg['To'] = RECIPIENT
+    msg['CC'] = CC
+
+    # Add attachments and body
+    textpart = MIMEText(BODY_TEXT)
+    msg.attach(textpart)
+    att = MIMEApplication(open(FILE_NAME_DEMO, 'rb').read())
+    att.add_header('Content-Disposition', 'attachment', filename=file)
+    msg.attach(att)
+
+    try:
+        response = client.send_raw_email(
+            Source=SENDER,
+            Destinations=[],
+            RawMessage={
+                'Data': msg.as_string(),
+            }
+        )
+    except ClientError as e:
+        print(e.response['Error']['Message'])
+    else:
+        print("Email sent! Message ID:", response['MessageId'])
+
+
+def list_to_string(prefix_bucket):  # Clase para unir el prefix de un bucket
+    str1 = '/'
+    return str1.join(prefix_bucket)
+
+
+def main():
+    session = boto3.Session(profile_name='profile')
+    s3_client = session.client('s3')
+
+    url = "s3 bucket url"
+    bucket = url.rsplit('/', 8)[2]
+
+    local = "foler_path"
+
+    prefix_bucket = url.rsplit('/', 7)[3:]  # Split para identificar los valores con la direccion de un bucket
+    print(prefix_bucket)
+    prefix = list_to_string(prefix_bucket)
+    print(prefix)
+    download_directory(s3_client, bucket, prefix, local)
+
+    sendmail()
+
+
+if __name__ == '__main__':
+    t0 = time.time()
+    main()
+    t1 = time.time()
+    total_time = t1 - t0
+    print(total_time)
