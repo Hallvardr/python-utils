@@ -1,0 +1,52 @@
+#!/bin/bash
+## declare an array variable
+rds_user=user
+rds_pass=pass
+rds_endpoint=rds
+local_path=path
+
+s3_path="s3"
+S3Uri_sql="$s3_path""/cron_task/sql/"
+
+aws s3 sync "local" $S3Uri_sql
+
+declare -a block=("QoS" "billing" "report")
+for m in "${block[@]}"
+do
+
+# starting block part
+LocalPath="$local_path$m"
+S3Uri_input="$s3_path""/cron_task/sql/""$m"
+S3Uri_output="$s3_path""/cron_task/daily_extractions/""$m"
+echo "$S3Uri_input"
+aws s3 sync $S3Uri_input $LocalPath --exclude '*' --include "*.sql"
+
+# starting block concatenation
+current_time=$(date -d "yesterday" "+%Y.%m.%d")
+        for sql_file in `ls "$LocalPath"/*.sql`;
+        do
+        file=`echo "$sql_file" | cut -d'.' -f1`
+        ####
+        read -ra vars <<< $(mysql -h $rds_endpoint -D information_schema -u $rds_user -p$rds_pass -N -e "SELECT TABLE_SCHEMA
+        FROM COLUMNS
+        WHERE TABLE_SCHEMA LIKE '%something%'
+        GROUP BY 1")
+                for i in "${vars[@]}"; do
+                #rm $LocalPath/*.csv -f
+                echo "$rds_endpoint"
+                nohup mysql -h $rds_endpoint -u $rds_user -p$rds_pass -D $i -e "set @schemas='${i}'; source $sql_file;" > $sql_file.$i.$current_time.csv;
+                myfilesize=$(stat --format=%s "$sql_file.$i.$current_time.csv")
+                if [ $myfilesize != 0 ]
+                then
+                   #echo "hola"
+                   aws s3 sync $LocalPath $S3Uri_output --exclude '*' --include $sql_file.$i.$current_time.csv
+                else
+                    echo "$(date +%Y-%m-%d-%H-%M-%S) skiping upload $file.$tenant.$current_time.csv is empty -- $m block."
+                fi
+                done
+                #echo $i
+        done
+####
+rm $LocalPath/*.sql -f
+#rm $LocalPath/*.csv -f
+done
