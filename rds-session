@@ -1,0 +1,141 @@
+#! /usr/bin/python
+
+import argparse
+import boto3
+import os
+import base64
+import rsa
+import subprocess
+import json
+from subprocess import Popen
+from tabulate import tabulate
+from pprint import pprint
+
+if os.getenv('AWS_PROFILE') == '':
+    DEFAULT_PROFILE = 'dev'
+else:
+    DEFAULT_PROFILE = os.getenv('AWS_PROFILE')
+
+DEFAULT_LOCAL_PORT = '2422'
+DEFAULT_DB_PORT = '3308'
+
+pwd = os.getcwd()
+
+def create_port_forwarding(local_port, DB_port, rds_endpoint):
+    cmd = "ssh localhost -p " + local_port + " -L " + DB_port + ":" + rds_endpoint + ":3306 -N"
+    os.system(cmd)
+
+def clean_known_host(local_port):
+    known_host = pwd + "/.ssh/known_hosts"
+    # f = open(known_host, "r")
+    # print(f.read())
+    with open(known_host, "r") as f:
+        lines = f.readlines()
+    with open(known_host, "w") as f:
+        for line in lines:
+            if "[localhost]:" + local_port in line:
+                continue
+            else:
+                f.write(line)
+
+def main():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-n','--name',dest='name',required=False, help='rdp.py -n *-idv-* --profile dev|stg|prod --region eu-west-1' )
+    parser.add_argument('-p','--profile', dest='profile', default=None, required=False, help='rdp.py -n *-idv-* --profile dev|stg|prod --region eu-west-1')
+    parser.add_argument('-r','--region',dest='region',required=False, help='rdp.py -n *-idv-* --profile dev|stg|prod --region eu-west-1' )
+    parser.add_argument('-l', '--list',dest='list',required=False,action='store_true',help='Only list resources no start ssm session is triggered')
+    parser.add_argument(
+        '-t', '--terminal',
+        dest='terminal',
+        required=False,
+        action='store_true',
+        help='Instead of a Port forwarding starts a terminal session'
+    )
+
+    parser.set_defaults(profile=DEFAULT_PROFILE)
+    args, unknown = parser.parse_known_args()
+
+    if args.name is None:
+        rds_name = '*'
+    else:
+        rds_name = args.name
+
+    # filters = [{​​​​​​​
+    #     'Name': 'DBName',
+    #     'Values': [rds_name]
+    #     }​​​​​​​,
+    #     {​​​​​​​
+    #         'Name': 'DBInstanceStatus',
+    #         'Values': ['available']
+    #     }​​​​​​​]
+    if args.region is None:
+        aws_region = 'eu-west-1'
+    else:
+        aws_region = args.region
+
+    if args.region is None:
+        session = boto3.Session(profile_name=args.profile)
+    else:
+        session = boto3.Session(region_name=args.region,profile_name=args.profile)
+
+    rds_client = session.client('rds')
+    # response = rds_client.describe_db_instances(Filters=filters)
+    response = rds_client.describe_db_instances()
+    #pprint(response)
+
+    instances = []
+    index = 1
+    # for r in response['Reservations']:
+    for i in response['DBInstances']:
+        if i['DBInstanceStatus'] == 'available':
+            if rds_name != '*':
+                if rds_name in i['DBInstanceIdentifier']:
+                    instances.append([index, i['DBInstanceIdentifier'],i['Endpoint']['Address'],i['Endpoint']['Port']])
+                    index += 1
+            else:
+                instances.append([index, i['DBInstanceIdentifier'],i['Endpoint']['Address'],i['Endpoint']['Port']])
+                index += 1
+
+    print(tabulate(instances))
+
+    if not args.list:
+        try:
+            print('\n(Cancel CTRL+C)')
+            choice = int(input("Enter a selection number: "))
+            choice -= 1
+            if not args.terminal:
+                LOCAL_PORT = input("Local Port [Default 2422]: ")
+                DB_PORT = input("Database Port [Default 3308]: ")
+
+
+                if LOCAL_PORT == '':
+                    LOCAL_PORT = DEFAULT_LOCAL_PORT
+                else:
+                    validate = int(LOCAL_PORT)
+
+                if DB_PORT == '':
+                    DB_PORT = DEFAULT_DB_PORT
+                else:
+                    validate = int(DB_PORT)
+
+                print('\nCreating tunnel to:')
+                connection = {
+                    'Name': instances[choice][1],
+                    'Address': instances[choice][2]
+                }
+                print(json.dumps(connection, indent=2))
+
+                clean_known_host(LOCAL_PORT)
+
+                create_port_forwarding(LOCAL_PORT,DB_PORT,instances[choice][2])
+
+        except (KeyboardInterrupt, SystemExit):
+            print('CTRL+C:\nExit')
+        except (IndexError, ValueError):
+            print('\nERROR: Invalid Value')
+
+
+if __name__ == '__main__':
+    main()
+
