@@ -8,9 +8,9 @@ import os.path
 
 '''TODO: Automtizar lista tenants con un nohup a la BBDD para que se actualize la lista de tenants dinamicamente'''
 
-tenants = ["demo"]
+tenants = ["test"]
 
-path_merged = "/opt/g2m/cron_task/demo_ew1"
+path_merged = "path"
 path_merged_output = path_merged + "/output"
 path_merged_sql = path_merged + "/sql"
 
@@ -56,7 +56,7 @@ mes_extraccion = yesterday.strftime('%Y.%m.%d').rsplit(".", 1)[0]
 def main():
     for tenant in tenants:
         for sql in sql_queries(path_merged_sql):
-            extraction_file = sql + ".dv_saas_" + tenant + "." + yesterday.strftime('%Y.%m.%d') + ".csv"
+            extraction_file = sql + "." + tenant + "." + yesterday.strftime('%Y.%m.%d') + ".csv"
 
             for path in tenant_paths(path_merged_output, tenants):
                 query = sql.split(".", 1)[0]
