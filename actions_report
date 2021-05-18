@@ -1,0 +1,54 @@
+import pandas as pd
+
+raw_data = 'csv_file.csv'
+
+raw_data = pd.read_csv(raw_data, sep='\t')
+print(raw_data.head(5))
+
+raw_data.loc[:, "action_category_id":] = raw_data.loc[:, "action_category_id":]\
+    .apply(pd.to_numeric, downcast='integer', errors='coerce')
+
+raw_data.insert(5, "avg_score", (raw_data["score_sum"] / raw_data["count_sum"]), True)
+raw_data.insert(6, "avg_score_OK", (raw_data["sum_score_OK"] / raw_data["result_OK"]), True)
+raw_data.insert(11, "avg_score_KO", (raw_data["sum_score_KO"] / raw_data["result_KO"]), True)
+raw_data.insert(12, "percentage_OK_vs_KO", raw_data["result_OK"] / raw_data["count_sum"] * 100, True)
+raw_data.insert(15, "ratio_Success_Fail", raw_data["Successful"] / raw_data["count_sum"] * 100, True)
+
+raw_data.loc[:, "action_category_id":] = raw_data.loc[:, "action_category_id":]\
+    .apply(pd.to_numeric, downcast='integer', errors='coerce')
+
+insuficient_data = raw_data[raw_data["count_sum"] < 30].round(decimals=2)
+daily_extraction = raw_data[raw_data["count_sum"] >= 30].round(decimals=2)
+
+terrorificamente_mal = daily_extraction["ratio_Success_Fail"] < 25
+terrorificamente_mal = daily_extraction[terrorificamente_mal].round(decimals=2)
+
+muy_mal = (daily_extraction["ratio_Success_Fail"] < 40) & (daily_extraction["ratio_Success_Fail"] > 25)
+muy_mal = daily_extraction[muy_mal].round(decimals=2)
+
+mal = (daily_extraction["ratio_Success_Fail"] < 50) & (daily_extraction["ratio_Success_Fail"] > 40)
+mal = daily_extraction[mal].round(decimals=2)
+
+borderline = daily_extraction["ratio_Success_Fail"] == 50
+borderline = daily_extraction[borderline].round(decimals=2)
+
+bien = (daily_extraction["ratio_Success_Fail"] > 50) & (daily_extraction["ratio_Success_Fail"] < 60)
+bien = daily_extraction[bien].round(decimals=2)
+
+muy_bien = (daily_extraction["ratio_Success_Fail"] > 60) & (daily_extraction["ratio_Success_Fail"] < 75)
+muy_bien = daily_extraction[muy_bien].round(decimals=2)
+
+estupendo = daily_extraction["ratio_Success_Fail"] > 75
+estupendo = daily_extraction[estupendo].round(decimals=2)
+
+
+with pd.ExcelWriter("tontodenas_orange.xlsx") as writer:
+    raw_data.to_excel(writer, sheet_name='Raw_Data', index=False, engine='xlsxwriter')
+    terrorificamente_mal.to_excel(writer, sheet_name='terrorifico', index=False, engine='xlsxwriter')
+    muy_mal.to_excel(writer, sheet_name='muy_mal', index=False, engine='xlsxwriter')
+    mal.to_excel(writer, sheet_name='mal', index=False, engine='xlsxwriter')
+    borderline.to_excel(writer, sheet_name='borderline', index=False, engine='xlsxwriter')
+    bien.to_excel(writer, sheet_name='bien', index=False, engine='xlsxwriter')
+    muy_bien.to_excel(writer, sheet_name='muy_bien', index=False, engine='xlsxwriter')
+    estupendo.to_excel(writer, sheet_name='estupendo', index=False, engine='xlsxwriter')
+    insuficient_data.to_excel(writer, sheet_name='insuficient_data', index=False, engine='xlsxwriter')
