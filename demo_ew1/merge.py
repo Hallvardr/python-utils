@@ -6,8 +6,6 @@ import pandas as pd
 import os
 import os.path
 
-'''TODO: Automtizar lista tenants con un nohup a la BBDD para que se actualize la lista de tenants dinamicamente'''
-
 tenants = ["test"]
 
 path_merged = "path"
